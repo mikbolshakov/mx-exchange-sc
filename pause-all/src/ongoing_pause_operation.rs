@@ -15,7 +15,7 @@ pub enum OngoingOperation {
         addr_index: usize,
     },
 }
-
+/// https://github.com/multiversx/mx-sdk-rs/blob/master/contracts/modules/src/ongoing_operation.rs 
 #[elrond_wasm::module]
 pub trait OngoingPauseOperationModule:
     elrond_wasm_modules::ongoing_operation::OngoingOperationModule

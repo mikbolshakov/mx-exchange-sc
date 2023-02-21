@@ -19,7 +19,7 @@ mod pause_proxy {
 }
 
 pub mod ongoing_pause_operation;
-
+/// https://github.com/multiversx/mx-sdk-rs/blob/master/contracts/modules/src/ongoing_operation.rs 
 #[elrond_wasm::contract]
 pub trait PauseAll:
     ongoing_pause_operation::OngoingPauseOperationModule
@@ -28,6 +28,7 @@ pub trait PauseAll:
     #[init]
     fn init(&self) {}
 
+    /// Добавить адреса контрактов в сторэдж мэппер pausable_contracts
     #[only_owner]
     #[endpoint(addPausableContracts)]
     fn add_pausable_contracts(&self, pausable_sc_addr: MultiValueEncoded<ManagedAddress>) {
@@ -37,6 +38,7 @@ pub trait PauseAll:
         }
     }
 
+    /// Удалить адреса из сторэджа
     #[only_owner]
     #[endpoint(removePausableContracts)]
     fn remove_pausable_contracts(&self, pausable_sc_addr: MultiValueEncoded<ManagedAddress>) {
@@ -46,24 +48,21 @@ pub trait PauseAll:
         }
     }
 
-    /// Will pause the given list of contracts.
-    /// Contracts will only be paused if they are in the pausable_contracts list.
-    /// Other contracts will be ignored.
+    /// Поставить на паузу контракты из аргумента функции, если они уже есть сторэдже. 
+    /// Если некоторых адресов нет в сторэдже - эти контракты будут проигнорированы 
     #[only_owner]
     #[endpoint(pauseSelected)]
     fn pause_selected(&self, pausable_sc_addr: MultiValueEncoded<ManagedAddress>) {
         let whitelist = self.pausable_contracts();
         for addr in pausable_sc_addr {
             if whitelist.contains(&addr) {
-                self.call_pause(addr);
+                self.call_pause(addr); /// ставит на паузу через прокси
             }
         }
     }
 
-    /// Will attempt to pause all contracts from the whitelist.
-    /// Returns "completed" if all were paused.
-    /// Otherwise, it will save progress and return "interrupted",
-    /// and will require more calls to complete
+    /// Паузим контракты из сторэджа. Если абсолютно все запаузили, возвращает "завершено"
+    /// Если нет - возвращает "прерванно", и для завершения потребуется больше вызовов
     #[only_owner]
     #[endpoint(pauseAll)]
     fn pause_all(&self) -> OperationCompletionStatus {
@@ -71,17 +70,19 @@ pub trait PauseAll:
         let whitelist = self.pausable_contracts();
         let whitelist_len = whitelist.len();
 
+        /// проверка, есть ли газ в количестве MIN_GAS_TO_SAVE_PROGRESS
         let run_result = self.run_while_it_has_gas(MIN_GAS_TO_SAVE_PROGRESS, || {
             if current_index > whitelist_len {
                 return STOP_OP;
             }
-
+            /// идем по индексам и ставим на паузу контракты из сторэджа
             let sc_addr = whitelist.get_by_index(current_index);
             self.call_pause(sc_addr);
             current_index += 1;
 
             CONTINUE_OP
         });
+        /// выводим количество контрактов поставленных на паузу, если абсолютно все контракты запаузили
         if run_result == OperationCompletionStatus::InterruptedBeforeOutOfGas {
             self.save_progress(&OngoingOperation::PauseAll {
                 addr_index: current_index,
@@ -95,8 +96,7 @@ pub trait PauseAll:
         let _: IgnoreValue = self.pause_proxy(sc_addr).pause().execute_on_dest_context();
     }
 
-    /// Will unpause the given list of contracts.
-    /// Contracts not in the whitelist will be ignored.
+    /// 3 функции ниже абсолютно аналогичны верхним трем функциям, только pause заменили на resume
     #[only_owner]
     #[endpoint(resumeSelected)]
     fn resume_selected(&self, pausable_sc_addr: MultiValueEncoded<ManagedAddress>) {
